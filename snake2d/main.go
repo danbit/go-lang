@@ -46,7 +46,7 @@ func main() {
 
 	renderer, err = sdl.CreateRenderer(window, -1, sdl.RENDERER_ACCELERATED)
 	if err != nil {
-		fmt.Println("initializing renderer:", err)
+		fmt.Println("initializing renderer background:", err)
 		return
 	}
 	defer renderer.Destroy()
@@ -56,7 +56,20 @@ func main() {
 	var nextTick uint32
 	for running {
 
-		// improve preformance
+		for event = sdl.PollEvent(); event != nil; event = sdl.PollEvent() {
+			switch event.(type) {
+			case *sdl.QuitEvent:
+				running = false
+			}
+		}
+
+		drawBackground(renderer)
+		renderer.Clear()
+		drawPlayer(renderer)
+
+		renderer.Present()
+
+		//improve preformance
 		ticks := sdl.GetTicks()
 
 		if ticks < nextTick {
@@ -64,19 +77,19 @@ func main() {
 		}
 		nextTick = ticks + (1000 / fps)
 
-		for event = sdl.PollEvent(); event != nil; event = sdl.PollEvent() {
-			switch event.(type) {
-			case *sdl.QuitEvent:
-				running = false
-			}
-		}
-		drawBackground(renderer)
 	}
 }
 
 func drawBackground(renderer *sdl.Renderer) {
 	renderer.SetDrawColor(0, 0, 0, 0)
-	renderer.Clear()
+}
 
-	renderer.Present()
+func drawPlayer(renderer *sdl.Renderer) {
+	renderer.SetDrawColor(255, 255, 255, 255)
+	var rect sdl.Rect
+	rect.X = 10
+	rect.Y = 10
+	rect.W = 10
+	rect.H = 10
+	renderer.FillRect(&rect)
 }
