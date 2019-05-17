@@ -53,19 +53,26 @@ func main() {
 
 	running = true
 
+	var rectSnake = sdl.Rect{X: screenWidth / 2, Y: screenHeight / 2, W: 15, H: 15}
+	///var rectFood = sdl.Rect{X: 0, Y: 0, W: 5, H: 5}
+
 	var nextTick uint32
 	for running {
 
 		for event = sdl.PollEvent(); event != nil; event = sdl.PollEvent() {
-			switch event.(type) {
+			switch e := event.(type) {
 			case *sdl.QuitEvent:
 				running = false
+			case *sdl.KeyboardEvent:
+				fmt.Println(e)
 			}
 		}
 
 		drawBackground(renderer)
 		renderer.Clear()
-		drawPlayer(renderer)
+
+		draw(renderer, &rectSnake)
+		move(renderer, &rectSnake)
 
 		renderer.Present()
 
@@ -80,16 +87,25 @@ func main() {
 	}
 }
 
+func update() {}
+
 func drawBackground(renderer *sdl.Renderer) {
 	renderer.SetDrawColor(0, 0, 0, 0)
 }
 
-func drawPlayer(renderer *sdl.Renderer) {
+func draw(renderer *sdl.Renderer, rect *sdl.Rect) {
 	renderer.SetDrawColor(255, 255, 255, 255)
-	var rect sdl.Rect
-	rect.X = 10
-	rect.Y = 10
-	rect.W = 10
-	rect.H = 10
-	renderer.FillRect(&rect)
+	renderer.FillRect(rect)
+}
+
+func move(renderer *sdl.Renderer, rect *sdl.Rect) {
+	renderer.SetDrawColor(255, 255, 255, 255)
+
+	rect.X++
+
+	if rect.X > screenWidth {
+		rect.X = 0
+	}
+
+	renderer.FillRect(rect)
 }
