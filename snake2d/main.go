@@ -150,7 +150,7 @@ func randomPosition() sdl.Point {
 	r1 := rand.New(s1)
 
 	newX := math.Floor(r1.Float64()*(float64(ScreenWidth/CellSize))) * float64(CellSize)
-	newY := math.Floor(r1.Float64()*(float64(ScreenWidth/CellSize))) * float64(CellSize)
+	newY := math.Floor(r1.Float64()*(float64(ScreenHeight/CellSize))) * float64(CellSize)
 
 	newPosition := sdl.Point{
 		X: int32(newX),
