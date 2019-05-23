@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/veandco/go-sdl2/sdl"
+	"github.com/veandco/go-sdl2/ttf"
 )
 
 const (
@@ -16,6 +17,7 @@ const (
 )
 
 type Snake struct {
+	dX, dY    int32 //direction X and Y
 	width     int32
 	height    int32
 	positions []sdl.Point
@@ -27,17 +29,20 @@ type Food struct {
 	position sdl.Point
 }
 
-// horizontalVelocity, verticalVelocity
-var dX, dY int32
+var random = rand.New(rand.NewSource(time.Now().UnixNano()))
+var font *ttf.Font
+var scoreSurface *sdl.Surface
+var scoreTexture *sdl.Texture
 
 func main() {
 	var winTitle = "Go Snake 2D"
 	var window *sdl.Window
-	var context sdl.GLContext
 	var renderer *sdl.Renderer
 	var event sdl.Event
 	var snake Snake
 	var food Food
+	var scoreText = "SCORE: %d"
+	var score int32
 	var running bool
 	var err error
 
@@ -58,30 +63,47 @@ func main() {
 	}
 	defer window.Destroy()
 
-	context, err = window.GLCreateContext()
-	if err != nil {
-		panic(err)
-	}
-	defer sdl.GLDeleteContext(context)
-
 	renderer, err = sdl.CreateRenderer(window, -1, sdl.RENDERER_ACCELERATED)
 	if err != nil {
 		fmt.Println("initializing renderer background:", err)
 		return
 	}
+	//sdl.SetHint(sdl.HINT_RENDER_SCALE_QUALITY, "1")
 	defer renderer.Destroy()
+
+	// Using the SDL_ttf library so need to initialize it before using it
+	if err = ttf.Init(); err != nil {
+		fmt.Printf("Failed to initialize TTF: %s\n", err)
+	}
+
+	if font, err = ttf.OpenFont("./fonts/Roboto-Regular.ttf", 14); err != nil {
+		fmt.Printf("Failed to open font: %s\n", err)
+	}
+
+	if scoreSurface, err = font.RenderUTF8Solid(fmt.Sprintf(scoreText, score), sdl.Color{R: 255, G: 255, B: 255, A: 255}); err != nil {
+		fmt.Printf("Failed to render text: %s\n", err)
+	}
+
+	if scoreTexture, err = renderer.CreateTextureFromSurface(scoreSurface); err != nil {
+		fmt.Printf("Failed to create texture: %s\n", err)
+	}
+
+	defer scoreTexture.Destroy()
+	defer font.Close()
+	scoreSurface.Free()
 
 	running = true
 
 	snake = Snake{
+		dX:     1,
+		dY:     0,
 		width:  CellSize,
 		height: CellSize,
 		positions: []sdl.Point{
-			sdl.Point{X: ScreenWidth/2 + CellSize*4 + 1, Y: ScreenHeight / 2},
-			sdl.Point{X: ScreenWidth/2 + CellSize*3 + 1, Y: ScreenHeight / 2},
-			sdl.Point{X: ScreenWidth/2 + CellSize*2 + 1, Y: ScreenHeight / 2},
+			sdl.Point{X: ScreenWidth / 2, Y: ScreenHeight / 2},
 			sdl.Point{X: ScreenWidth/2 + CellSize + 1, Y: ScreenHeight / 2},
-			sdl.Point{X: ScreenWidth / 2, Y: ScreenHeight / 2}},
+			sdl.Point{X: ScreenWidth/2 + CellSize*2 + 1, Y: ScreenHeight / 2},
+		},
 	}
 
 	food = Food{
@@ -91,11 +113,9 @@ func main() {
 	}
 
 	fmt.Printf("food.position= %d, %d\n", food.position.X, food.position.Y)
+	fmt.Printf("snake.position= %d, %d\n", snake.positions[0].X, snake.positions[0].Y)
 
-	dX = 1
-	dY = 0
-
-	ticker := time.NewTicker(time.Second / 20)
+	ticker := time.NewTicker(time.Second / 10)
 
 	for running {
 
@@ -105,18 +125,37 @@ func main() {
 				running = false
 			case *sdl.KeyboardEvent:
 				if e.Type == sdl.KEYDOWN {
-					changeDirection(e)
+					changeDirection(e, &snake)
+
+					if key := e.Keysym.Sym; key == sdl.K_SPACE {
+						food.position = sdl.Point{X: -1, Y: -100}
+					}
 				}
 			}
+		}
+
+		moveSnake(&snake)
+		snakeArea := sdl.Rect{X: snake.positions[0].X, Y: snake.positions[0].Y, H: CellSize, W: CellSize}
+		if snake.checkCollision(snakeArea) {
+			fmt.Println("Game Over")
+			running = false
+			return
 		}
 
 		drawBackground(renderer)
 		renderer.Clear()
 
-		moveSnake(&snake)
-
 		drawFood(renderer, &food)
+
+		foodArea := sdl.Rect{X: food.position.X, Y: food.position.Y, H: CellSize, W: CellSize}
+		if snake.checkCollision(foodArea) {
+			food.position = sdl.Point{X: -1, Y: -100}
+			snake.addTail()
+			score += 10
+		}
+
 		drawSnake(renderer, &snake)
+		drawScore(renderer, scoreTexture, fmt.Sprintf(scoreText, score))
 
 		renderer.Present()
 
@@ -141,16 +180,31 @@ func drawSnake(renderer *sdl.Renderer, snake *Snake) {
 }
 
 func drawFood(renderer *sdl.Renderer, food *Food) {
+	if food.position.X == -1 {
+		food.position = randomPosition()
+		fmt.Println(food.position)
+	}
+
 	draw(renderer, &sdl.Rect{
 		X: food.position.X, Y: food.position.Y, W: food.width, H: food.height})
 }
 
-func randomPosition() sdl.Point {
-	s1 := rand.NewSource(time.Now().UnixNano())
-	r1 := rand.New(s1)
+func drawScore(renderer *sdl.Renderer, scoreTexture *sdl.Texture, scoreText string) {
+	//TODO refactory
+	var err error
+	if scoreSurface, err = font.RenderUTF8Solid(scoreText, sdl.Color{R: 255, G: 255, B: 255, A: 255}); err != nil {
+		fmt.Printf("Failed to render text: %s\n", err)
+	}
 
-	newX := math.Floor(r1.Float64()*(float64(ScreenWidth/CellSize))) * float64(CellSize)
-	newY := math.Floor(r1.Float64()*(float64(ScreenHeight/CellSize))) * float64(CellSize)
+	if scoreTexture, err = renderer.CreateTextureFromSurface(scoreSurface); err != nil {
+		fmt.Printf("Failed to create texture: %s\n", err)
+	}
+	renderer.Copy(scoreTexture, nil, &sdl.Rect{W: (ScreenWidth / 7), H: 35, X: 5, Y: 0})
+}
+
+func randomPosition() sdl.Point {
+	newX := math.Floor(random.Float64()*(float64(ScreenWidth/CellSize))) * float64(CellSize)
+	newY := math.Floor(random.Float64()*(float64(ScreenHeight/CellSize))) * float64(CellSize)
 
 	newPosition := sdl.Point{
 		X: int32(newX),
@@ -161,43 +215,50 @@ func randomPosition() sdl.Point {
 }
 
 func moveSnake(snake *Snake) {
-
-	//TODO check collision
-
 	for i := 0; i < len(snake.positions)-1; i++ {
 		snake.positions[i] = snake.positions[i+1]
 	}
 
 	head := snake.positions[len(snake.positions)-1]
-	snake.positions[len(snake.positions)-1].X = head.X + dX*CellSize
-	snake.positions[len(snake.positions)-1].Y = head.Y + dY*CellSize
+	snake.positions[len(snake.positions)-1].X = head.X + snake.dX*CellSize
+	snake.positions[len(snake.positions)-1].Y = head.Y + snake.dY*CellSize
 
-	for i := range snake.positions {
-		if headPos := snake.positions[i]; headPos.X > ScreenWidth {
-			snake.positions[i].X = 0
-		} else if headPos.X < 0 {
-			snake.positions[i].X = ScreenWidth
-		} else if headPos.Y > ScreenHeight {
-			snake.positions[i].Y = 0
-		} else if headPos.Y < 0 {
-			snake.positions[i].Y = ScreenHeight
-		}
+	if snakeLength := len(snake.positions) - 1; head.X > ScreenWidth {
+		snake.positions[snakeLength].X = 0
+	} else if head.X < 0 {
+		snake.positions[snakeLength].X = ScreenWidth
+	} else if head.Y > ScreenHeight {
+		snake.positions[snakeLength].Y = 0
+	} else if head.Y < 0 {
+		snake.positions[snakeLength].Y = ScreenHeight
 	}
 }
 
-func changeDirection(e *sdl.KeyboardEvent) {
+func (s *Snake) addTail() {
+	newPart := sdl.Point{X: 1, Y: 1}
+	s.positions = append([]sdl.Point{newPart}, s.positions...)
+}
 
-	if key := e.Keysym.Sym; key == sdl.K_RIGHT && dX != -1 {
-		dX = 1
-		dY = 0
-	} else if key == sdl.K_LEFT && dX != 1 {
-		dX = -1
-		dY = 0
-	} else if key == sdl.K_UP && dY != 1 {
-		dX = 0
-		dY = -1
-	} else if key == sdl.K_DOWN && dY != -1 {
-		dX = 0
-		dY = 1
+func changeDirection(e *sdl.KeyboardEvent, snake *Snake) {
+	if key := e.Keysym.Sym; key == sdl.K_RIGHT && !(snake.dX == -1) {
+		snake.dX = 1
+		snake.dY = 0
+	} else if key == sdl.K_LEFT && !(snake.dX == 1) {
+		snake.dX = -1
+		snake.dY = 0
+	} else if key == sdl.K_UP && !(snake.dY == 1) {
+		snake.dX = 0
+		snake.dY = -1
+	} else if key == sdl.K_DOWN && !(snake.dY == -1) {
+		snake.dX = 0
+		snake.dY = 1
 	}
+}
+
+func (s *Snake) checkCollision(area sdl.Rect) bool {
+	if head := s.positions[len(s.positions)-1]; head.InRect(&area) {
+		return true
+	}
+
+	return false
 }
