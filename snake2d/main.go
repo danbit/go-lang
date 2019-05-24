@@ -8,8 +8,19 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/looplab/fsm"
+
 	"github.com/veandco/go-sdl2/sdl"
 	"github.com/veandco/go-sdl2/ttf"
+)
+
+type State int
+
+const (
+	ON_MENU State = iota
+	PLAYING
+	PAUSED
+	GAME_OVER
 )
 
 const (
@@ -19,6 +30,11 @@ const (
 	CellSize          int32  = 15
 	ScoreText         string = "SCORE:"
 )
+
+type GameState struct {
+	To  string
+	FSM *fsm.FSM
+}
 
 type Dimension struct {
 	width  int32
@@ -42,7 +58,9 @@ func main() {
 	var renderer *sdl.Renderer
 	var font *ttf.Font
 	var event sdl.Event
-	var rect sdl.Rect
+	var scoreRect sdl.Rect
+	var pressEnterRect sdl.Rect
+	var gameState *GameState
 	var snake Snake
 	var food Food
 	var score int32
@@ -86,6 +104,8 @@ func main() {
 
 	running = true
 
+	gameState = newGameState("snake")
+
 	snake = Snake{
 		direction: sdl.Point{X: 1, Y: 0},
 		dimension: Dimension{width: CellSize, height: CellSize},
@@ -112,6 +132,19 @@ func main() {
 				running = false
 			case *sdl.KeyboardEvent:
 				if e.Type == sdl.KEYDOWN {
+
+					if key := e.Keysym.Sym; key == sdl.K_RETURN {
+						err := gameState.FSM.Event(PLAYING.value())
+						if err != nil {
+							fmt.Printf("Failed to change state: %s\n", err)
+						}
+					} else if key == sdl.K_SPACE {
+						err := gameState.FSM.Event(PAUSED.value())
+						if err != nil {
+							fmt.Printf("Failed to change state: %s\n", err)
+						}
+					}
+
 					changeDirection(e, &snake)
 				}
 			}
@@ -119,32 +152,41 @@ func main() {
 
 		<-ticker.C
 
-		snake.move()
-		snakeArea := sdl.Rect{X: snake.positions[0].X, Y: snake.positions[0].Y, H: CellSize, W: CellSize}
-		if snake.checkCollision(snakeArea) {
-			fmt.Println("Game Over")
-			running = false
-			return
-		}
-
 		drawBackground(renderer)
 		renderer.Clear()
 
-		drawFood(renderer, &food)
+		if currentState := gameState.FSM.Current(); currentState == PLAYING.value() {
 
-		foodArea := sdl.Rect{X: food.position.X, Y: food.position.Y, H: CellSize, W: CellSize}
-		if snake.checkCollision(foodArea) {
-			food.position = sdl.Point{X: -1, Y: -100}
-			snake.addTail()
-			score += 10
+			snake.move()
+			snakeArea := sdl.Rect{X: snake.positions[0].X, Y: snake.positions[0].Y, H: CellSize, W: CellSize}
+			if snake.checkCollision(snakeArea) {
+				err := gameState.FSM.Event(GAME_OVER.value())
+				if err != nil {
+					fmt.Printf("Failed to change state: %s\n", err)
+				}
+			}
+
+			drawFood(renderer, &food)
+
+			foodArea := sdl.Rect{X: food.position.X, Y: food.position.Y, H: CellSize, W: CellSize}
+			if snake.checkCollision(foodArea) {
+				food.position = sdl.Point{X: -1, Y: -100}
+				snake.addTail()
+				score += 10
+			}
+
+			drawSnake(renderer, &snake)
+			renderText(renderer, sdl.Point{X: 5, Y: 0}, &scoreRect, ScoreText, font)
+			renderText(renderer, sdl.Point{X: scoreRect.X + scoreRect.W + 5, Y: 0}, &scoreRect, formatInt32(score), font)
+		} else if currentState == ON_MENU.value() {
+			renderText(renderer, sdl.Point{X: ScreenWidth/2 - 94, Y: ScreenHeight/2 - 12}, &pressEnterRect, "<Press ENTER to Start>", font)
+		} else if currentState == PAUSED.value() {
+			renderText(renderer, sdl.Point{X: ScreenWidth / 2, Y: ScreenHeight / 2}, &pressEnterRect, "Paused", font)
+		} else if currentState == GAME_OVER.value() {
+			renderText(renderer, sdl.Point{X: ScreenWidth / 2, Y: ScreenHeight / 2}, &pressEnterRect, "Game Over", font)
 		}
 
-		drawSnake(renderer, &snake)
-		renderText(renderer, sdl.Point{X: 5, Y: 0}, &rect, ScoreText, font)
-		renderText(renderer, sdl.Point{X: rect.X + rect.W + 5, Y: 0}, &rect, formatInt32(score), font)
-
 		renderer.Present()
-
 	}
 
 	os.Exit(0)
@@ -264,4 +306,32 @@ func (s *Snake) checkCollision(area sdl.Rect) bool {
 
 func formatInt32(n int32) string {
 	return strconv.FormatInt(int64(n), 10)
+}
+
+func newGameState(to string) *GameState {
+	gameState := &GameState{
+		To: to,
+	}
+
+	gameState.FSM = fsm.NewFSM(
+		ON_MENU.value(),
+		fsm.Events{
+			{Name: PLAYING.value(), Src: []string{ON_MENU.value(), PAUSED.value()}, Dst: PLAYING.value()},
+			{Name: PAUSED.value(), Src: []string{PLAYING.value()}, Dst: PAUSED.value()},
+			{Name: GAME_OVER.value(), Src: []string{PLAYING.value()}, Dst: GAME_OVER.value()},
+		},
+		fsm.Callbacks{
+			"enter_state": func(e *fsm.Event) { gameState.enterState(e) },
+		},
+	)
+
+	return gameState
+}
+
+func (d *GameState) enterState(e *fsm.Event) {
+	fmt.Printf("The gameState to %s is %s\n", d.To, e.Dst)
+}
+
+func (s State) value() string {
+	return [...]string{"on_menu", "playing", "paused", "game_over"}[s]
 }
