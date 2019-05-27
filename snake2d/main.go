@@ -24,11 +24,10 @@ const (
 )
 
 const (
-	ScreenWidth       int32  = 640
-	ScreenHeight      int32  = 480
-	ScreenScoreOffset int32  = 30
-	CellSize          int32  = 15
-	ScoreText         string = "SCORE:"
+	ScreenWidth  int32  = 640
+	ScreenHeight int32  = 480
+	CellSize     int32  = 20
+	ScoreText    string = "SCORE:"
 )
 
 type GameState struct {
@@ -52,6 +51,10 @@ type Food struct {
 	position  sdl.Point
 }
 
+var snake Snake
+var food Food
+var score int32
+
 func main() {
 	var winTitle = "Go Snake 2D"
 	var window *sdl.Window
@@ -59,11 +62,7 @@ func main() {
 	var font *ttf.Font
 	var event sdl.Event
 	var scoreRect sdl.Rect
-	var pressEnterRect sdl.Rect
 	var gameState *GameState
-	var snake Snake
-	var food Food
-	var score int32
 	var running bool
 	var err error
 
@@ -104,22 +103,7 @@ func main() {
 
 	running = true
 
-	gameState = newGameState("snake")
-
-	snake = Snake{
-		direction: sdl.Point{X: 1, Y: 0},
-		dimension: Dimension{width: CellSize, height: CellSize},
-		positions: []sdl.Point{
-			sdl.Point{X: ScreenWidth / 2, Y: ScreenHeight / 2},
-			sdl.Point{X: ScreenWidth/2 + CellSize + 1, Y: ScreenHeight / 2},
-			sdl.Point{X: ScreenWidth/2 + CellSize*2 + 1, Y: ScreenHeight / 2},
-		},
-	}
-
-	food = Food{
-		dimension: Dimension{width: CellSize, height: CellSize},
-		position:  randomPosition(),
-	}
+	gameState = NewGameState("snake")
 
 	rand.Seed(time.Now().UnixNano())
 	ticker := time.NewTicker(time.Second / 10)
@@ -132,58 +116,50 @@ func main() {
 				running = false
 			case *sdl.KeyboardEvent:
 				if e.Type == sdl.KEYDOWN {
-
 					if key := e.Keysym.Sym; key == sdl.K_RETURN {
-						err := gameState.FSM.Event(PLAYING.value())
-						if err != nil {
-							fmt.Printf("Failed to change state: %s\n", err)
-						}
+						gameState.changeState(PLAYING)
+						gameState.changeState(ON_MENU)
 					} else if key == sdl.K_SPACE {
-						err := gameState.FSM.Event(PAUSED.value())
-						if err != nil {
-							fmt.Printf("Failed to change state: %s\n", err)
-						}
+						gameState.changeState(PAUSED)
 					}
 
-					changeDirection(e, &snake)
+					snake.ChangeDirection(e)
 				}
 			}
 		}
 
 		<-ticker.C
 
-		drawBackground(renderer)
+		DrawBackground(renderer)
 		renderer.Clear()
 
 		if currentState := gameState.FSM.Current(); currentState == PLAYING.value() {
+			snake.Move()
 
-			snake.move()
-			snakeArea := sdl.Rect{X: snake.positions[0].X, Y: snake.positions[0].Y, H: CellSize, W: CellSize}
-			if snake.checkCollision(snakeArea) {
-				err := gameState.FSM.Event(GAME_OVER.value())
-				if err != nil {
-					fmt.Printf("Failed to change state: %s\n", err)
-				}
-			}
-
-			drawFood(renderer, &food)
+			DrawFood(renderer, &food)
+			DrawSnake(renderer, &snake)
 
 			foodArea := sdl.Rect{X: food.position.X, Y: food.position.Y, H: CellSize, W: CellSize}
-			if snake.checkCollision(foodArea) {
-				food.position = sdl.Point{X: -1, Y: -100}
-				snake.addTail()
+			if snake.CheckCollision(foodArea) {
+				food.position = RandomPosition()
+				snake.AddTail()
 				score += 10
 			}
 
-			drawSnake(renderer, &snake)
-			renderText(renderer, sdl.Point{X: 5, Y: 0}, &scoreRect, ScoreText, font)
-			renderText(renderer, sdl.Point{X: scoreRect.X + scoreRect.W + 5, Y: 0}, &scoreRect, formatInt32(score), font)
+			position := sdl.Point{X: 5, Y: 0}
+			RenderText(renderer, &position, &scoreRect, ScoreText, font)
+			position = sdl.Point{X: scoreRect.X + scoreRect.W + 5, Y: 0}
+			RenderText(renderer, &position, &scoreRect, FormatInt32(score), font)
+
+			if snake.IsTryingToEat() {
+				gameState.changeState(GAME_OVER)
+			}
 		} else if currentState == ON_MENU.value() {
-			renderText(renderer, sdl.Point{X: ScreenWidth/2 - 94, Y: ScreenHeight/2 - 12}, &pressEnterRect, "<Press ENTER to Start>", font)
+			RenderText(renderer, nil, nil, "<Press ENTER to Start>", font)
 		} else if currentState == PAUSED.value() {
-			renderText(renderer, sdl.Point{X: ScreenWidth / 2, Y: ScreenHeight / 2}, &pressEnterRect, "Paused", font)
+			RenderText(renderer, nil, nil, "Paused", font)
 		} else if currentState == GAME_OVER.value() {
-			renderText(renderer, sdl.Point{X: ScreenWidth / 2, Y: ScreenHeight / 2}, &pressEnterRect, "Game Over", font)
+			RenderText(renderer, nil, nil, "Game Over", font)
 		}
 
 		renderer.Present()
@@ -192,32 +168,28 @@ func main() {
 	os.Exit(0)
 }
 
-func drawBackground(renderer *sdl.Renderer) {
+func DrawBackground(renderer *sdl.Renderer) {
 	renderer.SetDrawColor(0, 0, 0, 0)
 }
 
-func draw(renderer *sdl.Renderer, rect *sdl.Rect) {
+func Draw(renderer *sdl.Renderer, rect *sdl.Rect) {
 	renderer.SetDrawColor(255, 255, 255, 255)
 	renderer.FillRect(rect)
 }
 
-func drawSnake(renderer *sdl.Renderer, snake *Snake) {
+func DrawSnake(renderer *sdl.Renderer, snake *Snake) {
 	for _, element := range snake.positions {
-		draw(renderer, &sdl.Rect{
+		Draw(renderer, &sdl.Rect{
 			X: element.X, Y: element.Y, W: snake.dimension.width, H: snake.dimension.height})
 	}
 }
 
-func drawFood(renderer *sdl.Renderer, food *Food) {
-	if food.position.X == -1 {
-		food.position = randomPosition()
-	}
-
-	draw(renderer, &sdl.Rect{
+func DrawFood(renderer *sdl.Renderer, food *Food) {
+	Draw(renderer, &sdl.Rect{
 		X: food.position.X, Y: food.position.Y, W: food.dimension.width, H: food.dimension.height})
 }
 
-func renderText(renderer *sdl.Renderer, position sdl.Point, rect *sdl.Rect, text string, font *ttf.Font) {
+func RenderText(renderer *sdl.Renderer, position *sdl.Point, rect *sdl.Rect, text string, font *ttf.Font) {
 
 	solidSurface, err := font.RenderUTF8Solid(text, sdl.Color{R: 255, G: 255, B: 255, A: 255})
 	if err != nil {
@@ -231,18 +203,31 @@ func renderText(renderer *sdl.Renderer, position sdl.Point, rect *sdl.Rect, text
 
 	solidSurface.Free()
 
-	rect.X = position.X
-	rect.Y = position.Y
-	rect.W = solidSurface.W
-	rect.H = solidSurface.H
+	if rect == nil {
+		rect = &sdl.Rect{
+			X: (ScreenWidth - solidSurface.W) / 2,
+			Y: (ScreenHeight - solidSurface.H) / 2,
+			W: solidSurface.W,
+			H: solidSurface.H,
+		}
+	} else {
+		rect.X = position.X
+		rect.Y = position.Y
+		rect.W = solidSurface.W
+		rect.H = solidSurface.H
+	}
 
 	renderer.Copy(texture, nil, rect)
 	texture.Destroy()
 }
 
-func randomPosition() sdl.Point {
-	newX := math.Floor(rand.Float64()*(float64(ScreenWidth/CellSize))) * float64(CellSize)
-	newY := math.Floor(rand.Float64()*(float64(ScreenHeight/CellSize))) * float64(CellSize)
+func random(min, max int32) float64 {
+	return math.Round(float64(rand.Float64()*float64((max-min)+min)/float64(CellSize))) * float64(CellSize)
+}
+
+func RandomPosition() sdl.Point {
+	newX := random(0, ScreenWidth-CellSize)
+	newY := random(0, ScreenHeight-CellSize)
 
 	newPosition := sdl.Point{
 		X: int32(newX),
@@ -252,8 +237,7 @@ func randomPosition() sdl.Point {
 	return newPosition
 }
 
-// todo
-func (s *Snake) move() {
+func (s *Snake) Move() {
 	for i := 0; i < len(s.positions)-1; i++ {
 		s.positions[i] = s.positions[i+1]
 	}
@@ -273,30 +257,30 @@ func (s *Snake) move() {
 	}
 }
 
-func (s *Snake) addTail() {
+func (s *Snake) AddTail() {
 	newPart := sdl.Point{X: 1, Y: 1}
 	s.positions = append([]sdl.Point{newPart}, s.positions...)
 }
 
-func changeDirection(e *sdl.KeyboardEvent, snake *Snake) {
-	dX := snake.direction.X
-	dY := snake.direction.Y
+func (s *Snake) ChangeDirection(e *sdl.KeyboardEvent) {
+	dX := s.direction.X
+	dY := s.direction.Y
 	if key := e.Keysym.Sym; key == sdl.K_RIGHT && !(dX == -1) {
-		snake.direction.X = 1
-		snake.direction.Y = 0
+		s.direction.X = 1
+		s.direction.Y = 0
 	} else if key == sdl.K_LEFT && !(dX == 1) {
-		snake.direction.X = -1
-		snake.direction.Y = 0
+		s.direction.X = -1
+		s.direction.Y = 0
 	} else if key == sdl.K_UP && !(dY == 1) {
-		snake.direction.X = 0
-		snake.direction.Y = -1
+		s.direction.X = 0
+		s.direction.Y = -1
 	} else if key == sdl.K_DOWN && !(dY == -1) {
-		snake.direction.X = 0
-		snake.direction.Y = 1
+		s.direction.X = 0
+		s.direction.Y = 1
 	}
 }
 
-func (s *Snake) checkCollision(area sdl.Rect) bool {
+func (s *Snake) CheckCollision(area sdl.Rect) bool {
 	if head := s.positions[len(s.positions)-1]; head.InRect(&area) {
 		return true
 	}
@@ -304,11 +288,24 @@ func (s *Snake) checkCollision(area sdl.Rect) bool {
 	return false
 }
 
-func formatInt32(n int32) string {
+func (s *Snake) IsTryingToEat() bool {
+	for i := 0; i < len(s.positions)-1; i++ {
+		position := s.positions[i]
+		area := sdl.Rect{X: position.X, Y: position.Y, H: s.dimension.height, W: s.dimension.width}
+
+		if s.CheckCollision(area) {
+			return true
+		}
+	}
+
+	return false
+}
+
+func FormatInt32(n int32) string {
 	return strconv.FormatInt(int64(n), 10)
 }
 
-func newGameState(to string) *GameState {
+func NewGameState(to string) *GameState {
 	gameState := &GameState{
 		To: to,
 	}
@@ -316,9 +313,12 @@ func newGameState(to string) *GameState {
 	gameState.FSM = fsm.NewFSM(
 		ON_MENU.value(),
 		fsm.Events{
-			{Name: PLAYING.value(), Src: []string{ON_MENU.value(), PAUSED.value()}, Dst: PLAYING.value()},
+			{Name: PLAYING.value(), Src: []string{ON_MENU.value()}, Dst: PLAYING.value()},
 			{Name: PAUSED.value(), Src: []string{PLAYING.value()}, Dst: PAUSED.value()},
+			{Name: PAUSED.value(), Src: []string{PAUSED.value()}, Dst: PLAYING.value()},
 			{Name: GAME_OVER.value(), Src: []string{PLAYING.value()}, Dst: GAME_OVER.value()},
+			{Name: GAME_OVER.value(), Src: []string{GAME_OVER.value()}, Dst: ON_MENU.value()},
+			{Name: ON_MENU.value(), Src: []string{GAME_OVER.value()}, Dst: ON_MENU.value()},
 		},
 		fsm.Callbacks{
 			"enter_state": func(e *fsm.Event) { gameState.enterState(e) },
@@ -328,10 +328,43 @@ func newGameState(to string) *GameState {
 	return gameState
 }
 
-func (d *GameState) enterState(e *fsm.Event) {
-	fmt.Printf("The gameState to %s is %s\n", d.To, e.Dst)
+func (gs *GameState) enterState(e *fsm.Event) {
+	fmt.Printf("The gameState to %s is %s\n", gs.To, e.Dst)
+
+	if e.Src == ON_MENU.value() && e.Dst == PLAYING.value() {
+		snake, food, score = CreateLevel()
+		sdl.Delay(500)
+	}
+}
+
+func (gs *GameState) changeState(state State) {
+	err := gs.FSM.Event(state.value())
+	if err != nil {
+		fmt.Printf("Failed to change state: %s\n", err)
+	}
 }
 
 func (s State) value() string {
 	return [...]string{"on_menu", "playing", "paused", "game_over"}[s]
+}
+
+func CreateLevel() (snake Snake, food Food, score int32) {
+	snake = Snake{
+		direction: sdl.Point{X: 1, Y: 0},
+		dimension: Dimension{width: CellSize, height: CellSize},
+		positions: []sdl.Point{
+			sdl.Point{X: ScreenWidth / 2, Y: ScreenHeight / 2},
+			sdl.Point{X: ScreenWidth/2 + CellSize + 1, Y: ScreenHeight / 2},
+			sdl.Point{X: ScreenWidth/2 + CellSize*2 + 1, Y: ScreenHeight / 2},
+		},
+	}
+
+	food = Food{
+		dimension: Dimension{width: CellSize, height: CellSize},
+		position:  RandomPosition(),
+	}
+
+	score = 0
+
+	return
 }
