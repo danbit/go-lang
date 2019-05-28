@@ -15,5 +15,3 @@ Install GCC, SDL, SDL_gfx, and SDL_ttf:
 * Arch Linux, run:
  
 			pacman -S gcc sdl2 sdl2_gfx sdl2_image sdl2_ttf
-
-## Go 

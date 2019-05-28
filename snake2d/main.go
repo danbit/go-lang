@@ -2,9 +2,12 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"math"
 	"math/rand"
 	"os"
+	"os/user"
+	"path/filepath"
 	"strconv"
 	"time"
 
@@ -24,10 +27,11 @@ const (
 )
 
 const (
-	ScreenWidth  int32  = 640
-	ScreenHeight int32  = 480
-	CellSize     int32  = 20
-	ScoreText    string = "SCORE:"
+	ScreenWidth   int32  = 640
+	ScreenHeight  int32  = 480
+	CellSize      int32  = 20
+	ScoreText     string = "SCORE:"
+	HighScoreText string = "HIGHSCORE:"
 )
 
 type GameState struct {
@@ -53,7 +57,7 @@ type Food struct {
 
 var snake Snake
 var food Food
-var score int32
+var highScore, score int32
 
 func main() {
 	var winTitle = "Go Snake 2D"
@@ -62,6 +66,7 @@ func main() {
 	var font *ttf.Font
 	var event sdl.Event
 	var scoreRect sdl.Rect
+	var highScoreRect sdl.Rect
 	var gameState *GameState
 	var running bool
 	var err error
@@ -105,6 +110,8 @@ func main() {
 
 	gameState = NewGameState("snake")
 
+	highScore = readHighscore()
+
 	rand.Seed(time.Now().UnixNano())
 	ticker := time.NewTicker(time.Second / 10)
 
@@ -133,7 +140,8 @@ func main() {
 		DrawBackground(renderer)
 		renderer.Clear()
 
-		if currentState := gameState.FSM.Current(); currentState == PLAYING.value() {
+		switch cs := gameState.FSM.Current(); cs {
+		case PLAYING.value():
 			snake.Move()
 
 			DrawFood(renderer, &food)
@@ -151,14 +159,22 @@ func main() {
 			position = sdl.Point{X: scoreRect.X + scoreRect.W + 5, Y: 0}
 			RenderText(renderer, &position, &scoreRect, FormatInt32(score), font)
 
+			position = sdl.Point{X: ScreenWidth - 200, Y: 0}
+			RenderText(renderer, &position, &highScoreRect, HighScoreText, font)
+			position = sdl.Point{X: highScoreRect.X + highScoreRect.W + 5, Y: 0}
+			RenderText(renderer, &position, &highScoreRect, FormatInt32(highScore), font)
+
 			if snake.IsTryingToEat() {
 				gameState.changeState(GAME_OVER)
+				sdl.Delay(500)
 			}
-		} else if currentState == ON_MENU.value() {
+		case ON_MENU.value():
 			RenderText(renderer, nil, nil, "<Press ENTER to Start>", font)
-		} else if currentState == PAUSED.value() {
+		case PAUSED.value():
 			RenderText(renderer, nil, nil, "Paused", font)
-		} else if currentState == GAME_OVER.value() {
+		case GAME_OVER.value():
+			highScore = max(highScore, score)
+			createHighscore(highScore)
 			RenderText(renderer, nil, nil, "Game Over", font)
 		}
 
@@ -333,7 +349,6 @@ func (gs *GameState) enterState(e *fsm.Event) {
 
 	if e.Src == ON_MENU.value() && e.Dst == PLAYING.value() {
 		snake, food, score = CreateLevel()
-		sdl.Delay(500)
 	}
 }
 
@@ -367,4 +382,59 @@ func CreateLevel() (snake Snake, food Food, score int32) {
 	score = 0
 
 	return
+}
+
+func max(x, y int32) int32 {
+	if x >= y {
+		return x
+	}
+	return y
+}
+
+func createHighscore(hs int32) {
+	f, err := os.Create(getScorePath())
+	check(err)
+
+	_, err = f.WriteString(FormatInt32(hs))
+	f.Sync()
+}
+
+func readHighscore() int32 {
+	f, err := os.Open(getScorePath())
+	check(err)
+	defer f.Close()
+
+	fi, err := f.Stat()
+	if err != nil {
+		fmt.Printf("Failed read score file status %s\n", err)
+	}
+
+	if fi.Size() <= 0 {
+		return 0
+	}
+
+	b := make([]byte, fi.Size())
+	d, err := f.Read(b)
+	check(err)
+	fmt.Printf("%d bytes: %s\n", d, string(b))
+
+	r, _ := strconv.Atoi(string(b))
+
+	return int32(r)
+}
+
+func getScorePath() string {
+	usr, err := user.Current()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	p := filepath.FromSlash(fmt.Sprintf("%s/.gosnake", usr.HomeDir))
+	return p
+}
+
+func check(e error) {
+	if e != nil {
+		panic(e)
+	}
 }
