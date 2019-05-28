@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/base64"
 	"fmt"
 	"log"
 	"math"
@@ -107,11 +108,8 @@ func main() {
 	defer font.Close()
 
 	running = true
-
 	gameState = NewGameState("snake")
-
 	highScore = readHighscore()
-
 	rand.Seed(time.Now().UnixNano())
 	ticker := time.NewTicker(time.Second / 10)
 
@@ -395,7 +393,9 @@ func createHighscore(hs int32) {
 	f, err := os.Create(getScorePath())
 	check(err)
 
-	_, err = f.WriteString(FormatInt32(hs))
+	sEnc := base64.StdEncoding.EncodeToString([]byte(FormatInt32(hs)))
+
+	_, err = f.WriteString(sEnc)
 	f.Sync()
 }
 
@@ -405,21 +405,22 @@ func readHighscore() int32 {
 	defer f.Close()
 
 	fi, err := f.Stat()
-	if err != nil {
-		fmt.Printf("Failed read score file status %s\n", err)
-	}
-
-	if fi.Size() <= 0 {
+	if err != nil || fi.Size() <= 0 {
+		fmt.Printf("Failed to read score file status %s\n", err)
 		return 0
 	}
 
 	b := make([]byte, fi.Size())
-	d, err := f.Read(b)
+	_, err = f.Read(b)
 	check(err)
-	fmt.Printf("%d bytes: %s\n", d, string(b))
 
-	r, _ := strconv.Atoi(string(b))
+	sDec, err := base64.StdEncoding.DecodeString(string(b))
+	if err != nil {
+		fmt.Println("decode error:", err)
+		return 0
+	}
 
+	r, _ := strconv.Atoi(string(sDec))
 	return int32(r)
 }
 
