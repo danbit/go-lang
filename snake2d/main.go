@@ -400,8 +400,19 @@ func createHighscore(hs int32) {
 }
 
 func readHighscore() int32 {
-	f, err := os.Open(getScorePath())
-	check(err)
+	var f *os.File
+	var err error
+	p := getScorePath()
+
+	if _, ferr := os.Stat(p); os.IsNotExist(ferr) {
+		fmt.Println("creating score file")
+		f, err = os.Create(p)
+		check(err)
+	} else {
+		fmt.Println("opening score file")
+		f, err = os.Open(p)
+		check(err)
+	}
 	defer f.Close()
 
 	fi, err := f.Stat()
