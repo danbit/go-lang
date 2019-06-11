@@ -79,7 +79,6 @@ func main() {
 	var scoreRect sdl.Rect
 	var highScoreRect sdl.Rect
 	var gameState *GameState
-	var running bool
 	var err error
 
 	if err = sdl.Init(sdl.INIT_EVERYTHING); err != nil {
@@ -117,11 +116,13 @@ func main() {
 	}
 	defer font.Close()
 
-	running = true
 	gameState = newGameState("snake")
 	highScore = readHighscore()
 	rand.Seed(time.Now().UnixNano())
+
+	showGrid := false
 	ticker := time.NewTicker(time.Second / 10)
+	running := true
 
 	for running {
 
@@ -137,8 +138,7 @@ func main() {
 					} else if key == sdl.K_SPACE {
 						gameState.changeState(PAUSED)
 					} else if key == sdl.K_g {
-						//todo draw grid
-						food.position = randomPosition() // for tests
+						showGrid = !showGrid
 					}
 
 					if gameState.FSM.Current() == PLAYING.value() {
@@ -159,34 +159,21 @@ func main() {
 
 			drawBorder(renderer)
 
-			head := snake.positions[0]
-
-			drawPoint(renderer, sdl.Rect{X: BorderSize, Y: BorderSize, W: CellSize, H: CellSize})
-			drawPoint(renderer, sdl.Rect{X: BorderSize + CellSize, Y: BorderSize + CellSize, W: CellSize, H: CellSize})
-
-			var gov bool
-			if head.X > level.dimension.W {
-				gov = true
-			} else if head.X < BorderSize {
-				gov = true
-			} else if head.Y > level.dimension.H {
-				gov = true
-			} else if head.Y < BorderSize {
-				gov = true
-			}
-
-			if gov {
-				//gameOver(gameState, highScore, score)
-				fmt.Println("game over")
+			if showGrid {
+				drawGrid(renderer)
 			}
 
 			drawSnake(renderer, &snake)
-			foodArea := drawFood(renderer, &food)
 
+			foodArea := drawFood(renderer, &food)
 			if snake.checkCollision(foodArea) {
-				food.position = randomPosition()
+				food.position = createFoodPoint(&snake)
 				snake.addTail()
 				score += 10
+			}
+
+			if snake.checkBorderCollision() {
+				gameOver(gameState, highScore, score)
 			}
 
 			position := sdl.Point{X: 5, Y: 0}
@@ -231,9 +218,11 @@ func drawBorder(renderer *sdl.Renderer) {
 	r := sdl.Rect{
 		X: BorderSize, Y: BorderSize, W: level.dimension.W, H: level.dimension.H,
 	}
-	draw(renderer, nil, Color{R: 255, G: 255, B: 0})
+	draw(renderer, nil, Color{R: 255, G: 255, B: 255})
 	renderer.DrawRect(&r)
+}
 
+func drawGrid(renderer *sdl.Renderer) {
 	draw(renderer, nil, Color{R: 255, G: 255, B: 255})
 
 	var i int32
@@ -248,11 +237,17 @@ func drawBorder(renderer *sdl.Renderer) {
 
 func drawSnake(renderer *sdl.Renderer, snake *Snake) {
 	var sArea sdl.Rect
-	for _, s := range snake.positions {
+	c := Color{R: 255, G: 255, B: 255}
+
+	for i, s := range snake.positions {
 		sArea = sdl.Rect{
 			X: s.X, Y: s.Y, W: snake.dimension.W, H: snake.dimension.H}
-		draw(renderer, &sArea,
-			Color{R: 255, G: 255, B: 255})
+
+		if i == len(snake.positions)-1 {
+			c = Color{R: 255, G: 0, B: 0}
+		}
+
+		draw(renderer, &sArea, c)
 	}
 }
 
@@ -260,13 +255,6 @@ func drawFood(renderer *sdl.Renderer, food *Food) (r sdl.Rect) {
 	r = sdl.Rect{
 		X: food.position.X, Y: food.position.Y, W: food.dimension.W, H: food.dimension.H}
 
-	draw(renderer, &r,
-		Color{R: 255, G: 255, B: 255})
-
-	return
-}
-
-func drawPoint(renderer *sdl.Renderer, r sdl.Rect) {
 	draw(renderer, &r,
 		Color{R: 255, G: 255, B: 255})
 
@@ -320,9 +308,22 @@ func randomPosition() sdl.Point {
 		Y: int32(newY),
 	}
 
-	fmt.Printf("food pos= %d,%d\n", newPosition.X, newPosition.Y)
-
 	return newPosition
+}
+
+func createFoodPoint(s *Snake) sdl.Point {
+	newPos := randomPosition()
+
+	for _, p := range s.positions {
+		if p.InRect(&sdl.Rect{X: newPos.X, Y: newPos.Y, W: s.dimension.W, H: s.dimension.H}) {
+			fmt.Println("ignored food pos", newPos)
+			createFoodPoint(s)
+		}
+	}
+
+	fmt.Println("new food pos", newPos)
+
+	return newPos
 }
 
 func (s *Snake) move() {
@@ -330,9 +331,9 @@ func (s *Snake) move() {
 		s.positions[i] = s.positions[i+1]
 	}
 
-	head := s.positions[len(s.positions)-1]
-	s.positions[len(s.positions)-1].X = head.X + s.direction.X*CellSize
-	s.positions[len(s.positions)-1].Y = head.Y + s.direction.Y*CellSize
+	tail := s.positions[len(s.positions)-1]
+	s.positions[len(s.positions)-1].X = tail.X + s.direction.X*CellSize
+	s.positions[len(s.positions)-1].Y = tail.Y + s.direction.Y*CellSize
 }
 
 func (s *Snake) addTail() {
@@ -364,6 +365,23 @@ func (s *Snake) checkCollision(area sdl.Rect) bool {
 	}
 
 	return false
+}
+
+func (s *Snake) checkBorderCollision() bool {
+	head := s.positions[len(s.positions)-1]
+
+	var collided bool
+	if head.X-s.dimension.W > level.dimension.W {
+		collided = true
+	} else if head.X < BorderSize {
+		collided = true
+	} else if head.Y-s.dimension.H > level.dimension.H {
+		collided = true
+	} else if head.Y < BorderSize {
+		collided = true
+	}
+
+	return collided
 }
 
 func (s *Snake) isTryingToEat() bool {
@@ -411,7 +429,6 @@ func (gs *GameState) enterState(e *fsm.Event) {
 
 	if e.Src == ON_MENU.value() && e.Dst == PLAYING.value() {
 		snake, food, score = createLevel()
-		fmt.Printf("snake initial position= %d, %d\n", snake.positions[0].X, snake.positions[0].Y)
 	}
 }
 
@@ -448,7 +465,7 @@ func createLevel() (snake Snake, food Food, score int32) {
 
 	food = Food{
 		dimension: Dimension{W: CellSize, H: CellSize},
-		position:  randomPosition(),
+		position:  createFoodPoint(&snake),
 	}
 
 	score = 0
