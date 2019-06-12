@@ -176,9 +176,9 @@ func main() {
 				gameOver(gameState, highScore, score)
 			}
 
-			position := sdl.Point{X: 5, Y: 0}
+			position := sdl.Point{X: BorderSize, Y: 0}
 			renderText(renderer, &position, &scoreRect, ScoreText, font)
-			position = sdl.Point{X: scoreRect.X + scoreRect.W + 5, Y: 0}
+			position = sdl.Point{X: scoreRect.X + scoreRect.W + BorderSize, Y: 0}
 			renderText(renderer, &position, &scoreRect, formatInt32(score), font)
 
 			position = sdl.Point{X: level.dimension.W - 200, Y: 0}
@@ -236,18 +236,14 @@ func drawGrid(renderer *sdl.Renderer) {
 }
 
 func drawSnake(renderer *sdl.Renderer, snake *Snake) {
-	var sArea sdl.Rect
+	var r sdl.Rect
 	c := Color{R: 255, G: 255, B: 255}
 
-	for i, s := range snake.positions {
-		sArea = sdl.Rect{
+	for _, s := range snake.positions {
+		r = sdl.Rect{
 			X: s.X, Y: s.Y, W: snake.dimension.W, H: snake.dimension.H}
 
-		if i == len(snake.positions)-1 {
-			c = Color{R: 255, G: 0, B: 0}
-		}
-
-		draw(renderer, &sArea, c)
+		draw(renderer, &r, c)
 	}
 }
 
@@ -316,12 +312,9 @@ func createFoodPoint(s *Snake) sdl.Point {
 
 	for _, p := range s.positions {
 		if p.InRect(&sdl.Rect{X: newPos.X, Y: newPos.Y, W: s.dimension.W, H: s.dimension.H}) {
-			fmt.Println("ignored food pos", newPos)
 			createFoodPoint(s)
 		}
 	}
-
-	fmt.Println("new food pos", newPos)
 
 	return newPos
 }
@@ -496,11 +489,9 @@ func readHighscore() int32 {
 	p := getScorePath()
 
 	if _, ferr := os.Stat(p); os.IsNotExist(ferr) {
-		fmt.Println("creating score file")
 		f, err = os.Create(p)
 		check(err)
 	} else {
-		fmt.Println("opening score file")
 		f, err = os.Open(p)
 		check(err)
 	}
