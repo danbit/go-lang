@@ -25,6 +25,7 @@ const (
 	PLAYING
 	PAUSED
 	GAME_OVER
+	GAME_WIN
 )
 
 const (
@@ -121,6 +122,7 @@ func main() {
 	rand.Seed(time.Now().UnixNano())
 
 	showGrid := false
+	totalGridCell := ((ScreenWidth - BorderSize) / CellSize) * ((ScreenHeight - BorderSize) / CellSize)
 	ticker := time.NewTicker(time.Second / 10)
 	running := true
 
@@ -167,13 +169,16 @@ func main() {
 
 			foodArea := drawFood(renderer, &food)
 			if snake.checkCollision(foodArea) {
+				if len(snake.positions) >= int(totalGridCell) {
+					gameWin(gameState)
+				}
 				food.position = createFoodPoint(&snake)
 				snake.addTail()
 				score += 10
 			}
 
 			if snake.checkBorderCollision() {
-				gameOver(gameState, highScore, score)
+				gameOver(gameState)
 			}
 
 			position := sdl.Point{X: BorderSize, Y: 0}
@@ -187,7 +192,7 @@ func main() {
 			renderText(renderer, &position, &highScoreRect, formatInt32(highScore), font)
 
 			if snake.isTryingToEat() {
-				gameOver(gameState, highScore, score)
+				gameOver(gameState)
 			}
 		case ON_MENU.value():
 			renderText(renderer, nil, nil, "<Press ENTER to Start>", font)
@@ -195,6 +200,8 @@ func main() {
 			renderText(renderer, nil, nil, "Paused", font)
 		case GAME_OVER.value():
 			renderText(renderer, nil, nil, "Game Over", font)
+		case GAME_WIN.value():
+			renderText(renderer, nil, nil, "Game Win", font)
 		}
 
 		renderer.Present()
@@ -408,9 +415,12 @@ func newGameState(to string) *GameState {
 			{Name: GAME_OVER.value(), Src: []string{PLAYING.value()}, Dst: GAME_OVER.value()},
 			{Name: GAME_OVER.value(), Src: []string{GAME_OVER.value()}, Dst: ON_MENU.value()},
 			{Name: ON_MENU.value(), Src: []string{GAME_OVER.value()}, Dst: ON_MENU.value()},
+			{Name: ON_MENU.value(), Src: []string{GAME_WIN.value()}, Dst: ON_MENU.value()},
+			{Name: GAME_WIN.value(), Src: []string{PLAYING.value()}, Dst: GAME_WIN.value()},
 		},
 		fsm.Callbacks{
 			"enter_state": func(e *fsm.Event) { gameState.enterState(e) },
+			"leave_state": func(e *fsm.Event) { gameState.leaveState(e) },
 		},
 	)
 
@@ -425,6 +435,17 @@ func (gs *GameState) enterState(e *fsm.Event) {
 	}
 }
 
+func (gs *GameState) leaveState(e *fsm.Event) {
+	fmt.Printf("Living fom state %s and enter to %s\n", e.Src, e.Dst)
+
+	if e.Src == PLAYING.value() && (e.Dst == GAME_OVER.value() || e.Dst == GAME_WIN.value()) {
+		if score > highScore {
+			saveHighscore(score)
+			highScore = score
+		}
+	}
+}
+
 func (gs *GameState) changeState(state State) {
 	err := gs.FSM.Event(state.value())
 	if err != nil {
@@ -433,7 +454,7 @@ func (gs *GameState) changeState(state State) {
 }
 
 func (s State) value() string {
-	return [...]string{"on_menu", "playing", "paused", "game_over"}[s]
+	return [...]string{"on_menu", "playing", "paused", "game_over", "game_win"}[s]
 }
 
 func createLevel() (snake Snake, food Food, score int32) {
@@ -453,6 +474,7 @@ func createLevel() (snake Snake, food Food, score int32) {
 		positions: []sdl.Point{
 			sdl.Point{X: screenCenterW, Y: screenCenterH},
 			sdl.Point{X: screenCenterW + CellSize, Y: screenCenterH},
+			sdl.Point{X: screenCenterW + CellSize*2, Y: screenCenterH},
 		},
 	}
 
@@ -473,7 +495,7 @@ func max(x, y int32) int32 {
 	return y
 }
 
-func createHighscore(hs int32) {
+func saveHighscore(hs int32) {
 	f, err := os.Create(getScorePath())
 	check(err)
 
@@ -533,9 +555,12 @@ func check(e error) {
 	}
 }
 
-func gameOver(gs *GameState, highScore int32, score int32) {
+func gameOver(gs *GameState) {
 	gs.changeState(GAME_OVER)
-	highScore = max(highScore, score)
-	createHighscore(highScore)
+	sdl.Delay(1000)
+}
+
+func gameWin(gs *GameState) {
+	gs.changeState(GAME_WIN)
 	sdl.Delay(1000)
 }
