@@ -21,6 +21,32 @@ type GameState struct {
 	FSM *fsm.FSM
 }
 
+func NewGameState(to string) *GameState {
+	gameState := &GameState{
+		To: to,
+	}
+
+	gameState.FSM = fsm.NewFSM(
+		ON_MENU.value(),
+		fsm.Events{
+			{Name: PLAYING.value(), Src: []string{ON_MENU.value()}, Dst: PLAYING.value()},
+			{Name: PAUSED.value(), Src: []string{PLAYING.value()}, Dst: PAUSED.value()},
+			{Name: PAUSED.value(), Src: []string{PAUSED.value()}, Dst: PLAYING.value()},
+			{Name: GAME_OVER.value(), Src: []string{PLAYING.value()}, Dst: GAME_OVER.value()},
+			{Name: GAME_OVER.value(), Src: []string{GAME_OVER.value()}, Dst: ON_MENU.value()},
+			{Name: ON_MENU.value(), Src: []string{GAME_OVER.value()}, Dst: ON_MENU.value()},
+			{Name: ON_MENU.value(), Src: []string{GAME_WIN.value()}, Dst: ON_MENU.value()},
+			{Name: GAME_WIN.value(), Src: []string{PLAYING.value()}, Dst: GAME_WIN.value()},
+		},
+		fsm.Callbacks{
+			"enter_state": func(e *fsm.Event) { gameState.enterState(e) },
+			"leave_state": func(e *fsm.Event) { gameState.leaveState(e) },
+		},
+	)
+
+	return gameState
+}
+
 func (gs *GameState) enterState(e *fsm.Event) {
 	fmt.Printf("The gameState to %s is %s\n", gs.To, e.Dst)
 
