@@ -7,6 +7,7 @@ import (
 	"github.com/veandco/go-sdl2/ttf"
 )
 
+//Game type
 type Game struct{}
 
 const (
@@ -42,6 +43,7 @@ var font *ttf.Font
 var event sdl.Event
 var err error
 
+// Start initialize all game components.
 func (g Game) Start(title string, width int32, height int32, fullscreen bool) error {
 	if err = sdl.Init(sdl.INIT_EVERYTHING); err != nil {
 		fmt.Println("initializing SDL:", err)
@@ -67,15 +69,18 @@ func (g Game) Start(title string, width int32, height int32, fullscreen bool) er
 	renderer, err = sdl.CreateRenderer(window, -1, sdl.RENDERER_ACCELERATED)
 	if err != nil {
 		fmt.Println("initializing renderer background:", err)
+		return err
 	}
 
 	// Using the SDL_ttf library so need to initialize it before using it
 	if err = ttf.Init(); err != nil {
 		fmt.Printf("Failed to initialize TTF: %s\n", err)
+		return err
 	}
 
 	if font, err = ttf.OpenFont("./fonts/Roboto-Regular.ttf", 18); err != nil {
 		fmt.Printf("Failed to open font: %s\n", err)
+		return err
 	}
 
 	isRunning = true
@@ -83,9 +88,11 @@ func (g Game) Start(title string, width int32, height int32, fullscreen bool) er
 	return nil
 }
 
+// Update run before Render. This method its used for update game logic.
 func (g Game) Update() {
 }
 
+// Render all game objects.
 func (g Game) Render() {
 	renderer.Clear()
 
@@ -94,6 +101,7 @@ func (g Game) Render() {
 	renderer.Present()
 }
 
+// HandleEvents listener all game events.
 func (g Game) HandleEvents() {
 	for event = sdl.PollEvent(); event != nil; event = sdl.PollEvent() {
 
@@ -119,13 +127,25 @@ func (g Game) HandleEvents() {
 	}
 }
 
+// Destroy SDL library.
 func (g Game) Destroy() {
+
 	sdl.Quit()
-	window.Destroy()
-	renderer.Destroy()
-	font.Close()
+
+	if window != nil {
+		window.Destroy()
+	}
+	if renderer != nil {
+		renderer.Destroy()
+	}
+	if font != nil {
+		font.Close()
+	}
+
+	ttf.Quit()
 }
 
+// IsRunning check if game is running.
 func (g Game) IsRunning() bool {
 	return isRunning
 }

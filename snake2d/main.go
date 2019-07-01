@@ -9,12 +9,14 @@ var game Game
 
 func main() {
 	game = Game{}
-	game.Start("Go Snake 2D", ScreenWidth+BorderSize, ScreenHeight+BorderSize, false)
+	defer game.Destroy()
+	if err := game.Start("Go Snake 2D", ScreenWidth+BorderSize, ScreenHeight+BorderSize, false); err != nil {
+		os.Exit(-1)
+	}
 
 	ticker := time.NewTicker(time.Second / 10)
 
 	for game.IsRunning() {
-
 		game.HandleEvents()
 		game.Update()
 		game.Render()
@@ -22,6 +24,5 @@ func main() {
 		<-ticker.C
 	}
 
-	game.Destroy()
 	os.Exit(0)
 }
