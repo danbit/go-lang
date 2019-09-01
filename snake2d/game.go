@@ -2,13 +2,12 @@ package main
 
 import (
 	"fmt"
+	"math/rand"
+	"time"
 
 	"github.com/veandco/go-sdl2/sdl"
 	"github.com/veandco/go-sdl2/ttf"
 )
-
-//Game type
-type Game struct{}
 
 const (
 	ScreenWidth   int32  = 688
@@ -19,22 +18,25 @@ const (
 	HighScoreText string = "HIGHSCORE:"
 )
 
+type Game struct{}
+
+type GameObject interface {
+	Draw(renderer *sdl.Renderer) error
+}
+
 type Dimension struct {
 	W int32
 	H int32
 }
 
-type Food struct {
-	dimension Dimension
-	position  sdl.Point
-}
-
 type Color struct {
-	R, G, B uint8
+	R, G, B, A uint8
 }
 
 var isRunning = false
-var level Level
+var level *Level
+var scene *Scene
+var gameState *GameState
 var snake Snake
 var food Food
 var window *sdl.Window
@@ -83,6 +85,10 @@ func (g Game) Start(title string, width int32, height int32, fullscreen bool) er
 		return err
 	}
 
+	gameState = NewGameState("gosnake")
+	highScore = readHighscore()
+	rand.Seed(time.Now().UnixNano())
+
 	isRunning = true
 
 	return nil
@@ -90,13 +96,21 @@ func (g Game) Start(title string, width int32, height int32, fullscreen bool) er
 
 // Update run before Render. This method its used for update game logic.
 func (g Game) Update() {
+	switch cs := gameState.FSM.Current(); cs {
+	case PLAYING.value():
+		snake.move()
+	}
 }
 
 // Render all game objects.
 func (g Game) Render() {
+	// Draw background
+	renderer.SetDrawColor(0, 0, 0, 255)
 	renderer.Clear()
 
-	renderer.SetDrawColor(0, 0, 0, 255)
+	if scene != nil {
+		scene.Draw(renderer)
+	}
 
 	renderer.Present()
 }
@@ -111,17 +125,17 @@ func (g Game) HandleEvents() {
 		case *sdl.KeyboardEvent:
 			if e.Type == sdl.KEYDOWN {
 				if key := e.Keysym.Sym; key == sdl.K_RETURN {
-					fmt.Println("gameState.changeState(PLAYING)")
-					fmt.Println("gameState.changeState(ON_MENU)")
+					gameState.changeState(PLAYING)
+					gameState.changeState(ON_MENU)
 				} else if key == sdl.K_SPACE {
-					fmt.Println("gameState.changeState(PAUSED)")
+					gameState.changeState(PAUSED)
 				} else if key == sdl.K_g {
 					//showGrid = !showGrid
 				}
 
-				// if gameState.FSM.Current() == PLAYING.value() {
-				// 	snake.changeDirection(e)
-				// }
+				if gameState.FSM.Current() == PLAYING.value() {
+					snake.changeDirection(e)
+				}
 			}
 		}
 	}

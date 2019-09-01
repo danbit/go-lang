@@ -51,7 +51,15 @@ func (gs *GameState) enterState(e *fsm.Event) {
 	fmt.Printf("The gameState to %s is %s\n", gs.To, e.Dst)
 
 	if e.Src == ON_MENU.value() && e.Dst == PLAYING.value() {
-		snake, food, score = createLevel()
+		level = NewLevel()
+		snake, food, score = level.snake, level.food, level.score
+
+		scene = &Scene{
+			GameObjects: []GameObject{
+				&food,
+				&snake,
+			},
+		}
 	}
 }
 

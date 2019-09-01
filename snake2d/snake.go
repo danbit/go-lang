@@ -1,11 +1,28 @@
 package main
 
-import "github.com/veandco/go-sdl2/sdl"
+import (
+	"github.com/veandco/go-sdl2/sdl"
+)
 
 type Snake struct {
 	direction sdl.Point //direction X and Y
 	dimension Dimension
 	positions []sdl.Point
+	color     Color
+}
+
+func (s *Snake) Draw(renderer *sdl.Renderer) error {
+	var r sdl.Rect
+
+	for _, p := range s.positions {
+		r = sdl.Rect{
+			X: p.X, Y: p.Y, W: s.dimension.W, H: s.dimension.H}
+
+		renderer.SetDrawColor(s.color.R, s.color.G, s.color.B, s.color.A)
+		renderer.FillRect(&r)
+	}
+
+	return nil
 }
 
 func (s *Snake) move() {

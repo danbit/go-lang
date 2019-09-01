@@ -1,23 +1,30 @@
 package main
 
-import "github.com/veandco/go-sdl2/sdl"
+import (
+	"github.com/veandco/go-sdl2/sdl"
+)
 
 type Level struct {
 	dimension Dimension
+	snake     Snake
+	food      Food
+	score     int32
 }
 
-func createLevel() (snake Snake, food Food, score int32) {
-	level = Level{
-		dimension: Dimension{
-			W: ScreenWidth - BorderSize,
-			H: ScreenHeight - BorderSize,
-		},
+// NewLevel return a level struct. Thread safety singleton.
+func NewLevel() *Level {
+	l := &Level{}
+
+	d := Dimension{
+		W: ScreenWidth - BorderSize,
+		H: ScreenHeight - BorderSize,
 	}
+	l.dimension = d
 
-	screenCenterW := (level.dimension.W/CellSize)/2*CellSize + CellSize
-	screenCenterH := (level.dimension.H/CellSize)/2*CellSize + CellSize
+	screenCenterW := (d.W/CellSize)/2*CellSize + CellSize
+	screenCenterH := (d.H/CellSize)/2*CellSize + CellSize
 
-	snake = Snake{
+	s := Snake{
 		direction: sdl.Point{X: 1, Y: 0},
 		dimension: Dimension{W: CellSize, H: CellSize},
 		positions: []sdl.Point{
@@ -25,26 +32,28 @@ func createLevel() (snake Snake, food Food, score int32) {
 			sdl.Point{X: screenCenterW + CellSize, Y: screenCenterH},
 			sdl.Point{X: screenCenterW + CellSize*2, Y: screenCenterH},
 		},
+		color: Color{R: 255, G: 255, B: 255, A: 255},
 	}
+	l.snake = s
 
-	food = Food{
+	f := Food{
 		dimension: Dimension{W: CellSize, H: CellSize},
-		position:  createFoodPoint(&snake),
+		position:  createFoodPoint(l, &snake),
+		color:     Color{R: 255, G: 255, B: 255, A: 255},
 	}
+	l.food = f
 
-	score = 0
-
-	return
+	return l
 }
 
-func createFoodPoint(s *Snake) sdl.Point {
-	newPos := randomPosition()
+func (l *Level) randomPosition() sdl.Point {
+	newX := random(BorderSize, l.dimension.W)
+	newY := random(BorderSize, l.dimension.H)
 
-	for _, p := range s.positions {
-		if p.InRect(&sdl.Rect{X: newPos.X, Y: newPos.Y, W: s.dimension.W, H: s.dimension.H}) {
-			createFoodPoint(s)
-		}
+	newPosition := sdl.Point{
+		X: int32(newX),
+		Y: int32(newY),
 	}
 
-	return newPos
+	return newPosition
 }
